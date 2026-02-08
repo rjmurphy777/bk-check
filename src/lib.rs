@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(report.passed_jobs.len(), 1);
         assert_eq!(report.passed_jobs[0].name, "lint");
         assert_eq!(report.failed_jobs.len(), 1);
-        assert_eq!(report.failed_jobs[0].name, "pytest shard 1");
+        assert_eq!(report.failed_jobs[0].jobs[0].name, "pytest shard 1");
         assert!(report.failed_jobs[0].failure_log.contains("ImportError"));
     }
 
@@ -531,6 +531,7 @@ mod tests {
         assert_eq!(report.overall_status, "failure");
         assert_eq!(report.failed_jobs.len(), 1);
         assert_eq!(report.failed_jobs[0].failure_log, "(log unavailable)");
+        assert_eq!(report.failed_jobs[0].jobs[0].name, "test");
         assert!(!report.warnings.is_empty());
         assert!(report.warnings[0].contains("Failed to fetch log"));
     }
