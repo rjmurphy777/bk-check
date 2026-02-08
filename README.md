@@ -1,6 +1,8 @@
 # bk-check
 
 [![CI](https://github.com/rjmurphy777/bk-check/actions/workflows/ci.yml/badge.svg)](https://github.com/rjmurphy777/bk-check/actions/workflows/ci.yml)
+[![Tests](https://github.com/rjmurphy777/bk-check/actions/workflows/ci.yml/badge.svg?event=push&label=tests)](https://github.com/rjmurphy777/bk-check/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/rjmurphy777/bk-check/graph/badge.svg)](https://codecov.io/gh/rjmurphy777/bk-check)
 
 CLI tool that checks Buildkite CI status for a GitHub PR and reports failures with logs.
 
