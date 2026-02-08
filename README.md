@@ -1,5 +1,7 @@
 # bk-check
 
+[![CI](https://github.com/rjmurphy777/bk-check/actions/workflows/ci.yml/badge.svg)](https://github.com/rjmurphy777/bk-check/actions/workflows/ci.yml)
+
 CLI tool that checks Buildkite CI status for a GitHub PR and reports failures with logs.
 
 Takes a GitHub PR URL, finds the associated Buildkite build via commit status checks, and outputs a structured JSON report with passed/failed jobs and cleaned failure logs — designed for quick triage and LLM consumption.
@@ -33,6 +35,10 @@ cargo install --path .
 ```
 
 ## Setup
+
+### 0. AppGate SDP
+
+Make sure AppGate SDP is open and connected before running bk-check. The tool needs network access to both the GitHub API and the Buildkite API, which require AppGate SDP to be active.
 
 ### 1. Buildkite API Token (required)
 

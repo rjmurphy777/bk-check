@@ -17,21 +17,20 @@ pub struct BkBuildInfo {
 
 pub fn parse_pr_url(input: &str) -> Result<PrInfo> {
     let trimmed = input.trim_end_matches('/');
-    let url = Url::parse(trimmed).map_err(|_| anyhow!("Invalid URL: {}", input))?;
+    let url = Url::parse(trimmed).map_err(|_| anyhow!("Invalid URL: {input}"))?;
 
     if url.host_str() != Some("github.com") {
-        return Err(anyhow!("Not a GitHub URL: {}", input));
+        return Err(anyhow!("Not a GitHub URL: {input}"));
     }
 
     let segments: Vec<&str> = url
         .path_segments()
-        .ok_or_else(|| anyhow!("No path in URL: {}", input))?
+        .ok_or_else(|| anyhow!("No path in URL: {input}"))?
         .collect();
 
     if segments.len() < 4 || segments[2] != "pull" {
         return Err(anyhow!(
-            "Expected format: https://github.com/OWNER/REPO/pull/NUMBER, got: {}",
-            input
+            "Expected format: https://github.com/OWNER/REPO/pull/NUMBER, got: {input}"
         ));
     }
 
@@ -48,21 +47,20 @@ pub fn parse_pr_url(input: &str) -> Result<PrInfo> {
 
 pub fn parse_buildkite_url(input: &str) -> Result<BkBuildInfo> {
     let trimmed = input.trim_end_matches('/');
-    let url = Url::parse(trimmed).map_err(|_| anyhow!("Invalid Buildkite URL: {}", input))?;
+    let url = Url::parse(trimmed).map_err(|_| anyhow!("Invalid Buildkite URL: {input}"))?;
 
     if url.host_str() != Some("buildkite.com") {
-        return Err(anyhow!("Not a Buildkite URL: {}", input));
+        return Err(anyhow!("Not a Buildkite URL: {input}"));
     }
 
     let segments: Vec<&str> = url
         .path_segments()
-        .ok_or_else(|| anyhow!("No path in Buildkite URL: {}", input))?
+        .ok_or_else(|| anyhow!("No path in Buildkite URL: {input}"))?
         .collect();
 
     if segments.len() < 4 || segments[2] != "builds" {
         return Err(anyhow!(
-            "Expected format: https://buildkite.com/ORG/PIPELINE/builds/NUMBER, got: {}",
-            input
+            "Expected format: https://buildkite.com/ORG/PIPELINE/builds/NUMBER, got: {input}"
         ));
     }
 
@@ -122,10 +120,9 @@ mod tests {
 
     #[test]
     fn test_parse_buildkite_url_valid() {
-        let result = parse_buildkite_url(
-            "https://buildkite.com/rokt/catalog-ci-pipeline/builds/5939",
-        )
-        .unwrap();
+        let result =
+            parse_buildkite_url("https://buildkite.com/rokt/catalog-ci-pipeline/builds/5939")
+                .unwrap();
         assert_eq!(
             result,
             BkBuildInfo {
@@ -138,10 +135,9 @@ mod tests {
 
     #[test]
     fn test_parse_buildkite_url_trailing_slash() {
-        let result = parse_buildkite_url(
-            "https://buildkite.com/rokt/catalog-ci-pipeline/builds/5939/",
-        )
-        .unwrap();
+        let result =
+            parse_buildkite_url("https://buildkite.com/rokt/catalog-ci-pipeline/builds/5939/")
+                .unwrap();
         assert_eq!(result.build_number, 5939);
     }
 
@@ -152,15 +148,11 @@ mod tests {
 
     #[test]
     fn test_parse_buildkite_url_missing_builds() {
-        assert!(
-            parse_buildkite_url("https://buildkite.com/rokt/pipeline/jobs/1").is_err()
-        );
+        assert!(parse_buildkite_url("https://buildkite.com/rokt/pipeline/jobs/1").is_err());
     }
 
     #[test]
     fn test_parse_buildkite_url_invalid_number() {
-        assert!(
-            parse_buildkite_url("https://buildkite.com/rokt/pipeline/builds/abc").is_err()
-        );
+        assert!(parse_buildkite_url("https://buildkite.com/rokt/pipeline/builds/abc").is_err());
     }
 }

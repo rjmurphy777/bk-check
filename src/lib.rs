@@ -45,16 +45,13 @@ pub async fn run(
         .collect();
 
     if bk_statuses.is_empty() {
-        return Err(anyhow!(
-            "No Buildkite status checks found for commit {}",
-            sha
-        ));
+        return Err(anyhow!("No Buildkite status checks found for commit {sha}"));
     }
 
     // Use the first Buildkite build URL found
     let bk_url = bk_statuses[0];
-    let bk_info = parse_buildkite_url(bk_url)
-        .context("Failed to parse Buildkite URL from GitHub status")?;
+    let bk_info =
+        parse_buildkite_url(bk_url).context("Failed to parse Buildkite URL from GitHub status")?;
 
     // 4. Fetch build details from Buildkite
     let build = bk_client
@@ -81,10 +78,10 @@ pub async fn run(
 
         // Soft-failed jobs are warnings, not failures
         if job.soft_failed == Some(true) {
-            warnings.push(format!("Soft-failed: {} ({})", name, state));
+            warnings.push(format!("Soft-failed: {name} ({state})"));
             passed_jobs.push(JobSummary {
                 name,
-                state: format!("{} (soft-failed)", state),
+                state: format!("{state} (soft-failed)"),
             });
             continue;
         }
@@ -106,7 +103,7 @@ pub async fn run(
                 {
                     Ok(log_resp) => log_parser::clean_log(&log_resp.content, max_log_lines),
                     Err(e) => {
-                        warnings.push(format!("Failed to fetch log for {}: {}", name, e));
+                        warnings.push(format!("Failed to fetch log for {name}: {e}"));
                         "(log unavailable)".to_string()
                     }
                 };
@@ -143,37 +140,38 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    async fn setup_github_mocks(server: &MockServer, sha: &str, bk_build_url: &str, bk_state: &str) {
+    async fn setup_github_mocks(
+        server: &MockServer,
+        sha: &str,
+        bk_build_url: &str,
+        bk_state: &str,
+    ) {
         // PR endpoint
         Mock::given(method("GET"))
             .and(path("/repos/ROKT/canal/pulls/14908"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "head": {
-                        "ref": "feature-branch",
-                        "sha": sha
-                    }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "head": {
+                    "ref": "feature-branch",
+                    "sha": sha
+                }
+            })))
             .mount(server)
             .await;
 
         // Commit status endpoint
         Mock::given(method("GET"))
-            .and(path(format!("/repos/ROKT/canal/commits/{}/status", sha)))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "state": bk_state,
-                    "statuses": [
-                        {
-                            "context": "buildkite/catalog-ci-pipeline",
-                            "state": bk_state,
-                            "target_url": bk_build_url,
-                            "description": "Build result"
-                        }
-                    ]
-                })),
-            )
+            .and(path(format!("/repos/ROKT/canal/commits/{sha}/status")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "state": bk_state,
+                "statuses": [
+                    {
+                        "context": "buildkite/catalog-ci-pipeline",
+                        "state": bk_state,
+                        "target_url": bk_build_url,
+                        "description": "Build result"
+                    }
+                ]
+            })))
             .mount(server)
             .await;
     }
@@ -183,7 +181,10 @@ mod tests {
         let gh_server = MockServer::start().await;
         let bk_server = MockServer::start().await;
 
-        let bk_build_url = format!("{}/rokt/catalog-ci-pipeline/builds/5939", "https://buildkite.com");
+        let bk_build_url = format!(
+            "{}/rokt/catalog-ci-pipeline/builds/5939",
+            "https://buildkite.com"
+        );
 
         setup_github_mocks(&gh_server, "sha123", &bk_build_url, "failure").await;
 
@@ -286,38 +287,36 @@ mod tests {
             .and(path(
                 "/v2/organizations/rokt/pipelines/catalog-ci-pipeline/builds/5959",
             ))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "number": 5959,
-                    "state": "passed",
-                    "branch": "main",
-                    "commit": "sha456",
-                    "message": "All good",
-                    "web_url": "https://buildkite.com/rokt/catalog-ci-pipeline/builds/5959",
-                    "jobs": [
-                        {
-                            "id": "j1",
-                            "name": "lint",
-                            "type": "script",
-                            "state": "passed",
-                            "exit_status": 0,
-                            "soft_failed": false,
-                            "web_url": null,
-                            "log_url": null
-                        },
-                        {
-                            "id": "j2",
-                            "name": "test",
-                            "type": "script",
-                            "state": "passed",
-                            "exit_status": 0,
-                            "soft_failed": false,
-                            "web_url": null,
-                            "log_url": null
-                        }
-                    ]
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "number": 5959,
+                "state": "passed",
+                "branch": "main",
+                "commit": "sha456",
+                "message": "All good",
+                "web_url": "https://buildkite.com/rokt/catalog-ci-pipeline/builds/5959",
+                "jobs": [
+                    {
+                        "id": "j1",
+                        "name": "lint",
+                        "type": "script",
+                        "state": "passed",
+                        "exit_status": 0,
+                        "soft_failed": false,
+                        "web_url": null,
+                        "log_url": null
+                    },
+                    {
+                        "id": "j2",
+                        "name": "test",
+                        "type": "script",
+                        "state": "passed",
+                        "exit_status": 0,
+                        "soft_failed": false,
+                        "web_url": null,
+                        "log_url": null
+                    }
+                ]
+            })))
             .mount(&bk_server)
             .await;
 
@@ -346,33 +345,29 @@ mod tests {
         // PR endpoint
         Mock::given(method("GET"))
             .and(path("/repos/ROKT/canal/pulls/14908"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "head": {
-                        "ref": "feature-branch",
-                        "sha": "sha789"
-                    }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "head": {
+                    "ref": "feature-branch",
+                    "sha": "sha789"
+                }
+            })))
             .mount(&gh_server)
             .await;
 
         // Commit status with no Buildkite entries
         Mock::given(method("GET"))
             .and(path("/repos/ROKT/canal/commits/sha789/status"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "state": "success",
-                    "statuses": [
-                        {
-                            "context": "ci/circleci",
-                            "state": "success",
-                            "target_url": "https://circleci.com/build/123",
-                            "description": "CircleCI build"
-                        }
-                    ]
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "state": "success",
+                "statuses": [
+                    {
+                        "context": "ci/circleci",
+                        "state": "success",
+                        "target_url": "https://circleci.com/build/123",
+                        "description": "CircleCI build"
+                    }
+                ]
+            })))
             .mount(&gh_server)
             .await;
 
@@ -437,28 +432,26 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/v2/organizations/rokt/pipelines/pipeline/builds/1"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "number": 1,
-                    "state": "passed",
-                    "branch": "main",
-                    "commit": "sha_sf",
-                    "message": null,
-                    "web_url": "https://buildkite.com/rokt/pipeline/builds/1",
-                    "jobs": [
-                        {
-                            "id": "j1",
-                            "name": "optional-lint",
-                            "type": "script",
-                            "state": "failed",
-                            "exit_status": 1,
-                            "soft_failed": true,
-                            "web_url": null,
-                            "log_url": null
-                        }
-                    ]
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "number": 1,
+                "state": "passed",
+                "branch": "main",
+                "commit": "sha_sf",
+                "message": null,
+                "web_url": "https://buildkite.com/rokt/pipeline/builds/1",
+                "jobs": [
+                    {
+                        "id": "j1",
+                        "name": "optional-lint",
+                        "type": "script",
+                        "state": "failed",
+                        "exit_status": 1,
+                        "soft_failed": true,
+                        "web_url": null,
+                        "log_url": null
+                    }
+                ]
+            })))
             .mount(&bk_server)
             .await;
 
@@ -491,28 +484,26 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/v2/organizations/rokt/pipelines/pipeline/builds/2"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "number": 2,
-                    "state": "failed",
-                    "branch": "main",
-                    "commit": "sha_lf",
-                    "message": null,
-                    "web_url": "https://buildkite.com/rokt/pipeline/builds/2",
-                    "jobs": [
-                        {
-                            "id": "jfail",
-                            "name": "test",
-                            "type": "script",
-                            "state": "failed",
-                            "exit_status": 1,
-                            "soft_failed": false,
-                            "web_url": null,
-                            "log_url": null
-                        }
-                    ]
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "number": 2,
+                "state": "failed",
+                "branch": "main",
+                "commit": "sha_lf",
+                "message": null,
+                "web_url": "https://buildkite.com/rokt/pipeline/builds/2",
+                "jobs": [
+                    {
+                        "id": "jfail",
+                        "name": "test",
+                        "type": "script",
+                        "state": "failed",
+                        "exit_status": 1,
+                        "soft_failed": false,
+                        "web_url": null,
+                        "log_url": null
+                    }
+                ]
+            })))
             .mount(&bk_server)
             .await;
 
@@ -540,7 +531,7 @@ mod tests {
         assert_eq!(report.overall_status, "failure");
         assert_eq!(report.failed_jobs.len(), 1);
         assert_eq!(report.failed_jobs[0].failure_log, "(log unavailable)");
-        assert!(report.warnings.len() >= 1);
+        assert!(!report.warnings.is_empty());
         assert!(report.warnings[0].contains("Failed to fetch log"));
     }
 }

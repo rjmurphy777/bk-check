@@ -57,12 +57,7 @@ impl BuildkiteClient {
         }
     }
 
-    pub async fn get_build(
-        &self,
-        org: &str,
-        pipeline: &str,
-        build_number: u64,
-    ) -> Result<BkBuild> {
+    pub async fn get_build(&self, org: &str, pipeline: &str, build_number: u64) -> Result<BkBuild> {
         let url = format!(
             "{}/v2/organizations/{}/pipelines/{}/builds/{}",
             self.base_url, org, pipeline, build_number
@@ -77,17 +72,13 @@ impl BuildkiteClient {
 
         if resp.status() == 403 {
             return Err(anyhow!(
-                "Access denied to Buildkite build {}/{}/builds/{}. Check your BUILDKITE_API_TOKEN permissions.",
-                org, pipeline, build_number
+                "Access denied to Buildkite build {org}/{pipeline}/builds/{build_number}. Check your BUILDKITE_API_TOKEN permissions."
             ));
         }
 
         if resp.status() == 404 {
             return Err(anyhow!(
-                "Buildkite build not found: {}/{}/builds/{}",
-                org,
-                pipeline,
-                build_number
+                "Buildkite build not found: {org}/{pipeline}/builds/{build_number}"
             ));
         }
 
@@ -122,11 +113,7 @@ impl BuildkiteClient {
 
         if resp.status() == 404 {
             return Err(anyhow!(
-                "Job log not found: {}/{}/builds/{}/jobs/{}",
-                org,
-                pipeline,
-                build_number,
-                job_id
+                "Job log not found: {org}/{pipeline}/builds/{build_number}/jobs/{job_id}"
             ));
         }
 
@@ -230,9 +217,7 @@ mod tests {
             .await;
 
         let client = BuildkiteClient::with_base_url("bad-token".to_string(), server.uri());
-        let result = client
-            .get_build("rokt", "catalog-ci-pipeline", 5939)
-            .await;
+        let result = client.get_build("rokt", "catalog-ci-pipeline", 5939).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Access denied"));
     }
@@ -250,9 +235,7 @@ mod tests {
             .await;
 
         let client = BuildkiteClient::with_base_url("bk-token".to_string(), server.uri());
-        let result = client
-            .get_build("rokt", "catalog-ci-pipeline", 99999)
-            .await;
+        let result = client.get_build("rokt", "catalog-ci-pipeline", 99999).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }

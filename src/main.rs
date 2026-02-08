@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
     let report = bk_check::run(&args.pr_url, args.max_log_lines, &gh_client, &bk_client).await?;
 
     let json = serde_json::to_string_pretty(&report).context("Failed to serialize report")?;
-    println!("{}", json);
+    println!("{json}");
 
     // Exit with non-zero status if there are failures
     if report.overall_status == "failure" {

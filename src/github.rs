@@ -67,12 +67,7 @@ impl GitHubClient {
             .context("Failed to reach GitHub API")?;
 
         if resp.status() == 404 {
-            return Err(anyhow!(
-                "PR not found: {}/{}/pull/{}",
-                owner,
-                repo,
-                pr_number
-            ));
+            return Err(anyhow!("PR not found: {owner}/{repo}/pull/{pr_number}"));
         }
 
         let resp = resp
@@ -267,11 +262,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/repos/ROKT/canal/pulls/1"))
             .and(header("authorization", "Bearer my-secret-token"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "head": { "ref": "b", "sha": "s" }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "head": { "ref": "b", "sha": "s" }
+            })))
             .mount(&server)
             .await;
 
