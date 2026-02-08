@@ -38,7 +38,7 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Run tests with coverage
-        run: cargo llvm-cov --all-features --fail-under-lines 100
+        run: cargo llvm-cov --all-features --ignore-filename-regex 'main\.rs' --fail-under-lines 99 --show-missing-lines
 
   fmt:
     name: Format

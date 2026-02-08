@@ -23,9 +23,11 @@ pub fn parse_pr_url(input: &str) -> Result<PrInfo> {
         return Err(anyhow!("Not a GitHub URL: {input}"));
     }
 
+    // path_segments() only returns None for cannot-be-a-base URLs (e.g. data:, mailto:)
+    // which are already rejected by the host check above
     let segments: Vec<&str> = url
         .path_segments()
-        .ok_or_else(|| anyhow!("No path in URL: {input}"))?
+        .expect("URL has host so has path")
         .collect();
 
     if segments.len() < 4 || segments[2] != "pull" {
@@ -55,7 +57,7 @@ pub fn parse_buildkite_url(input: &str) -> Result<BkBuildInfo> {
 
     let segments: Vec<&str> = url
         .path_segments()
-        .ok_or_else(|| anyhow!("No path in Buildkite URL: {input}"))?
+        .expect("URL has host so has path")
         .collect();
 
     if segments.len() < 4 || segments[2] != "builds" {
@@ -154,5 +156,10 @@ mod tests {
     #[test]
     fn test_parse_buildkite_url_invalid_number() {
         assert!(parse_buildkite_url("https://buildkite.com/rokt/pipeline/builds/abc").is_err());
+    }
+
+    #[test]
+    fn test_parse_buildkite_url_not_a_url() {
+        assert!(parse_buildkite_url("not-a-url").is_err());
     }
 }

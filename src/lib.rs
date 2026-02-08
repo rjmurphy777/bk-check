@@ -534,4 +534,68 @@ mod tests {
         assert!(!report.warnings.is_empty());
         assert!(report.warnings[0].contains("Failed to fetch log"));
     }
+
+    #[tokio::test]
+    async fn test_unnamed_and_running_jobs() {
+        let gh_server = MockServer::start().await;
+        let bk_server = MockServer::start().await;
+
+        let bk_build_url = "https://buildkite.com/rokt/pipeline/builds/3";
+
+        setup_github_mocks(&gh_server, "sha_ur", bk_build_url, "success").await;
+
+        Mock::given(method("GET"))
+            .and(path("/v2/organizations/rokt/pipelines/pipeline/builds/3"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "number": 3,
+                "state": "running",
+                "branch": "main",
+                "commit": "sha_ur",
+                "message": null,
+                "web_url": "https://buildkite.com/rokt/pipeline/builds/3",
+                "jobs": [
+                    {
+                        "id": "j-unnamed",
+                        "name": null,
+                        "type": "script",
+                        "state": null,
+                        "exit_status": null,
+                        "soft_failed": null,
+                        "web_url": null,
+                        "log_url": null
+                    },
+                    {
+                        "id": "j-running",
+                        "name": "deploy",
+                        "type": "script",
+                        "state": "running",
+                        "exit_status": null,
+                        "soft_failed": false,
+                        "web_url": null,
+                        "log_url": null
+                    }
+                ]
+            })))
+            .mount(&bk_server)
+            .await;
+
+        let gh_client = GitHubClient::with_base_url("gh-token".to_string(), gh_server.uri());
+        let bk_client = BuildkiteClient::with_base_url("bk-token".to_string(), bk_server.uri());
+
+        let report = run(
+            "https://github.com/ROKT/canal/pull/14908",
+            100,
+            &gh_client,
+            &bk_client,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.overall_status, "success");
+        assert_eq!(report.passed_jobs.len(), 2);
+        assert_eq!(report.passed_jobs[0].name, "unnamed-j-unnamed");
+        assert_eq!(report.passed_jobs[0].state, "unknown");
+        assert_eq!(report.passed_jobs[1].name, "deploy");
+        assert_eq!(report.passed_jobs[1].state, "running");
+    }
 }

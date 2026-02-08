@@ -310,4 +310,10 @@ mod tests {
         let result = client.get_build("o", "p", 1).await;
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_new_constructor() {
+        let client = BuildkiteClient::new("token".to_string());
+        assert_eq!(client.base_url, "https://api.buildkite.com");
+    }
 }
