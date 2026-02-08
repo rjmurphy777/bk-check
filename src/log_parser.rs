@@ -22,8 +22,8 @@ pub fn clean_log(raw: &str, max_lines: usize) -> String {
     let stripped = strip_ansi(raw);
     let stripped = strip_timestamps(&stripped);
     let lines: Vec<&str> = stripped.lines().collect();
-    let extracted = extract_failure_section(&lines, max_lines);
-    extracted
+
+    extract_failure_section(&lines, max_lines)
 }
 
 fn strip_ansi(input: &str) -> String {
@@ -94,12 +94,12 @@ mod tests {
 
     #[test]
     fn test_extract_with_traceback() {
-        let mut lines: Vec<String> = (0..50).map(|i| format!("normal line {}", i)).collect();
+        let mut lines: Vec<String> = (0..50).map(|i| format!("normal line {i}")).collect();
         lines.push("Traceback (most recent call last):".to_string());
         lines.push("  File \"test.py\", line 10".to_string());
         lines.push("ModuleNotFoundError: No module named 'foo'".to_string());
         for i in 0..10 {
-            lines.push(format!("after error {}", i));
+            lines.push(format!("after error {i}"));
         }
 
         let line_refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_extract_no_markers_takes_tail() {
-        let lines: Vec<String> = (0..200).map(|i| format!("line {}", i)).collect();
+        let lines: Vec<String> = (0..200).map(|i| format!("line {i}")).collect();
         let line_refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
         let result = extract_failure_section(&line_refs, 50);
 
@@ -144,11 +144,11 @@ mod tests {
     fn test_max_lines_cap() {
         let mut lines: Vec<String> = Vec::new();
         for i in 0..500 {
-            lines.push(format!("line {}", i));
+            lines.push(format!("line {i}"));
         }
         lines.push("FAILED test case".to_string());
         for i in 0..500 {
-            lines.push(format!("after {}", i));
+            lines.push(format!("after {i}"));
         }
 
         let line_refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();

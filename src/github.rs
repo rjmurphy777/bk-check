@@ -67,12 +67,7 @@ impl GitHubClient {
             .context("Failed to reach GitHub API")?;
 
         if resp.status() == 404 {
-            return Err(anyhow!(
-                "PR not found: {}/{}/pull/{}",
-                owner,
-                repo,
-                pr_number
-            ));
+            return Err(anyhow!("PR not found: {owner}/{repo}/pull/{pr_number}"));
         }
 
         let resp = resp
@@ -112,28 +107,17 @@ impl GitHubClient {
     }
 }
 
-pub fn resolve_github_token() -> Result<String> {
-    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+pub fn resolve_github_token_with(
+    env_token: Option<String>,
+    gh_fallback: impl FnOnce() -> Result<String>,
+) -> Result<String> {
+    if let Some(token) = env_token {
         if !token.is_empty() {
             return Ok(token);
         }
     }
 
-    let output = std::process::Command::new("gh")
-        .args(["auth", "token"])
-        .output()
-        .context("Failed to run 'gh auth token'. Install gh CLI or set GITHUB_TOKEN")?;
-
-    if !output.status.success() {
-        return Err(anyhow!(
-            "'gh auth token' failed. Set GITHUB_TOKEN or authenticate with 'gh auth login'"
-        ));
-    }
-
-    let token = String::from_utf8(output.stdout)
-        .context("Invalid UTF-8 from gh auth token")?
-        .trim()
-        .to_string();
+    let token = gh_fallback()?.trim().to_string();
 
     if token.is_empty() {
         return Err(anyhow!(
@@ -149,6 +133,12 @@ mod tests {
     use super::*;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn test_new_constructor() {
+        let client = GitHubClient::new("token".to_string());
+        assert_eq!(client.base_url, "https://api.github.com");
+    }
 
     #[tokio::test]
     async fn test_get_pr() {
@@ -267,16 +257,100 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/repos/ROKT/canal/pulls/1"))
             .and(header("authorization", "Bearer my-secret-token"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "head": { "ref": "b", "sha": "s" }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "head": { "ref": "b", "sha": "s" }
+            })))
             .mount(&server)
             .await;
 
         let client = GitHubClient::with_base_url("my-secret-token".to_string(), server.uri());
         let result = client.get_pr("ROKT", "canal", 1).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_pr_network_error() {
+        let client =
+            GitHubClient::with_base_url("token".to_string(), "http://127.0.0.1:1".to_string());
+        let result = client.get_pr("ROKT", "canal", 1).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to reach GitHub API"));
+    }
+
+    #[tokio::test]
+    async fn test_get_commit_status_network_error() {
+        let client =
+            GitHubClient::with_base_url("token".to_string(), "http://127.0.0.1:1".to_string());
+        let result = client.get_commit_status("ROKT", "canal", "sha").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to reach GitHub API"));
+    }
+
+    #[tokio::test]
+    async fn test_get_pr_server_error() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/repos/ROKT/canal/pulls/1"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let client = GitHubClient::with_base_url("token".to_string(), server.uri());
+        let result = client.get_pr("ROKT", "canal", 1).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_commit_status_server_error() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/repos/ROKT/canal/commits/sha/status"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let client = GitHubClient::with_base_url("token".to_string(), server.uri());
+        let result = client.get_commit_status("ROKT", "canal", "sha").await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_token_from_env() {
+        let result = resolve_github_token_with(Some("my-token".to_string()), || unreachable!());
+        assert_eq!(result.unwrap(), "my-token");
+    }
+
+    #[test]
+    fn test_resolve_token_empty_env_falls_back() {
+        let result =
+            resolve_github_token_with(Some("".to_string()), || Ok("gh-token\n".to_string()));
+        assert_eq!(result.unwrap(), "gh-token");
+    }
+
+    #[test]
+    fn test_resolve_token_no_env_falls_back() {
+        let result = resolve_github_token_with(None, || Ok("fallback-token\n".to_string()));
+        assert_eq!(result.unwrap(), "fallback-token");
+    }
+
+    #[test]
+    fn test_resolve_token_fallback_empty() {
+        let result = resolve_github_token_with(None, || Ok("  \n".to_string()));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No GitHub token"));
+    }
+
+    #[test]
+    fn test_resolve_token_fallback_error() {
+        let result = resolve_github_token_with(None, || Err(anyhow!("gh not found")));
+        assert!(result.is_err());
     }
 }
