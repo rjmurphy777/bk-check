@@ -29,7 +29,7 @@ jobs:
       - run: cargo test
 
   coverage:
-    name: Coverage
+    name: Coverage (100%)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,15 +37,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate coverage
-        run: cargo llvm-cov --all-features --lcov --output-path lcov.info
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: lcov.info
-          fail_ci_if_error: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Run tests with coverage
+        run: cargo llvm-cov --all-features --fail-under-lines 100
 
   fmt:
     name: Format
