@@ -1,4 +1,17 @@
 use regex::Regex;
+use std::sync::LazyLock;
+
+static RE_ANSI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]").unwrap());
+static RE_TIMESTAMP: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]\s?").unwrap());
+static RE_SHARD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"shard \d+/\d+").unwrap());
+static RE_TIMING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d+\.\d+s").unwrap());
+static RE_COVERAGE_FILE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"canal-coverage-\d+\.xml").unwrap());
+static RE_GROUP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"--group \d+").unwrap());
+static RE_HMS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\(\d+:\d+:\d+\)").unwrap());
+static RE_EQ_SEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"={3,}").unwrap());
+static RE_SPACES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" {2,}").unwrap());
 
 const FAILURE_MARKERS: &[&str] = &[
     "ERRORS",
@@ -50,13 +63,11 @@ pub fn clean_log(raw: &str, max_lines: usize) -> String {
 }
 
 fn strip_ansi(input: &str) -> String {
-    let re = Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]").unwrap();
-    re.replace_all(input, "").to_string()
+    RE_ANSI.replace_all(input, "").to_string()
 }
 
 fn strip_timestamps(input: &str) -> String {
-    let re = Regex::new(r"(?m)^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]\s?").unwrap();
-    re.replace_all(input, "").to_string()
+    RE_TIMESTAMP.replace_all(input, "").to_string()
 }
 
 /// Remove Buildkite infrastructure noise: once we hit a noise section,
@@ -172,22 +183,13 @@ fn is_test_output(line: &str) -> bool {
 /// Strips variable parts (shard numbers, timings, file paths with numbers)
 /// so that identical errors across shards compare as equal.
 pub fn normalize_for_grouping(log: &str) -> String {
-    let re_shard = Regex::new(r"shard \d+/\d+").unwrap();
-    let re_timing = Regex::new(r"\d+\.\d+s").unwrap();
-    let re_hms = Regex::new(r"\(\d+:\d+:\d+\)").unwrap();
-    let re_coverage_file = Regex::new(r"canal-coverage-\d+\.xml").unwrap();
-    let re_group = Regex::new(r"--group \d+").unwrap();
-    let re_eq_sep = Regex::new(r"={3,}").unwrap();
-
-    let s = re_shard.replace_all(log, "shard N/N");
-    let s = re_timing.replace_all(&s, "N.Ns");
-    let s = re_hms.replace_all(&s, "");
-    let s = re_coverage_file.replace_all(&s, "canal-coverage-N.xml");
-    let s = re_group.replace_all(&s, "--group N");
-    let s = re_eq_sep.replace_all(&s, "===");
-    // Collapse multiple spaces left by removals
-    let re_spaces = Regex::new(r" {2,}").unwrap();
-    let s = re_spaces.replace_all(&s, " ");
+    let s = RE_SHARD.replace_all(log, "shard N/N");
+    let s = RE_TIMING.replace_all(&s, "N.Ns");
+    let s = RE_HMS.replace_all(&s, "");
+    let s = RE_COVERAGE_FILE.replace_all(&s, "canal-coverage-N.xml");
+    let s = RE_GROUP.replace_all(&s, "--group N");
+    let s = RE_EQ_SEP.replace_all(&s, "===");
+    let s = RE_SPACES.replace_all(&s, " ");
     s.to_string()
 }
 
