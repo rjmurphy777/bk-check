@@ -85,6 +85,7 @@ export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
 
 ```
 bk-check <PR_URL> [--max-log-lines <N>]
+bk-check update
 ```
 
 ### Examples
@@ -107,11 +108,17 @@ Include more log context for failed jobs:
 bk-check https://github.com/ROKT/canal/pull/14908 --max-log-lines 200
 ```
 
+Update to the latest version:
+
+```bash
+bk-check update
+```
+
 ### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--max-log-lines` | `100` | Maximum number of log lines to include per failed job |
+| `--max-log-lines` | `100` | Maximum number of log lines to include per failed job (check command) |
 
 ### Exit codes
 
