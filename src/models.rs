@@ -35,6 +35,10 @@ pub struct FailedJob {
 /// When only one job has a particular failure, `jobs` has a single entry.
 #[derive(Debug, Serialize, Clone)]
 pub struct FailedJobGroup {
+    /// Human-readable explanation of this group, e.g.
+    /// "All 20 jobs failed with the same error" or absent for single-job groups.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     pub jobs: Vec<FailedJobInfo>,
     pub failure_log: String,
 }
@@ -110,9 +114,21 @@ fn group_failed_jobs(jobs: Vec<FailedJob>) -> Vec<FailedJobGroup> {
     key_order
         .into_iter()
         .filter_map(|key| {
-            groups
-                .remove(&key)
-                .map(|(failure_log, jobs)| FailedJobGroup { jobs, failure_log })
+            groups.remove(&key).map(|(failure_log, jobs)| {
+                let reason = if jobs.len() > 1 {
+                    Some(format!(
+                        "All {} jobs failed with the same error",
+                        jobs.len()
+                    ))
+                } else {
+                    None
+                };
+                FailedJobGroup {
+                    reason,
+                    jobs,
+                    failure_log,
+                }
+            })
         })
         .collect()
 }
@@ -160,6 +176,8 @@ mod tests {
         assert_eq!(report.failed_jobs[0].jobs.len(), 1);
         assert_eq!(report.failed_jobs[0].jobs[0].name, "pytest shard 1");
         assert!(report.failed_jobs[0].failure_log.contains("ImportError"));
+        // Single job group should not have a reason
+        assert!(report.failed_jobs[0].reason.is_none());
     }
 
     #[test]
@@ -272,6 +290,10 @@ mod tests {
         assert!(report.failed_jobs[0]
             .failure_log
             .contains("ModuleNotFoundError"));
+        assert_eq!(
+            report.failed_jobs[0].reason.as_deref(),
+            Some("All 3 jobs failed with the same error")
+        );
     }
 
     #[test]
