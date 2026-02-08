@@ -24,6 +24,7 @@ const NOISE_PREFIXES: &[&str] = &[
     "^^^ +++",
     "~~~ Uploading artifacts",
     "~~~ Running global pre-exit hook",
+    "~~~ Running global environment hook",
     "~~~ Running plugin",
     "~~~ :docker:",
     "~~~ Stopping ssh-agent",
@@ -33,6 +34,10 @@ const NOISE_PREFIXES: &[&str] = &[
     "$ docker compose",
     "$ /var/lib/buildkite-agent",
     "$ /etc/buildkite-agent",
+    // Docker run command lines from failed command output
+    "run --name buildkite",
+    // Emoji error status lines
+    "\u{1f6a8}",
 ];
 
 pub fn clean_log(raw: &str, max_lines: usize) -> String {
@@ -143,22 +148,21 @@ fn is_noise_line(line: &str) -> bool {
 }
 
 /// Check if a line looks like actual test/build output (not infrastructure).
+/// This is intentionally conservative — only matches lines that are clearly
+/// test framework output, to avoid prematurely exiting a noise section.
+/// Note: receives trimmed text from strip_buildkite_noise.
 fn is_test_output(line: &str) -> bool {
     if line.is_empty() {
         return false;
     }
-    // Known test output patterns
+    // Known test output patterns (error markers from test frameworks)
     for marker in FAILURE_MARKERS {
         if line.contains(marker) {
             return true;
         }
     }
-    // Python test output patterns
-    if line.starts_with("E ")
-        || line.starts_with("  ")
-        || line.contains("test")
-        || line.contains("assert")
-    {
+    // Python pytest assertion output (e.g. "E   ModuleNotFoundError: ...")
+    if line.starts_with("E ") {
         return true;
     }
     false
@@ -170,13 +174,20 @@ fn is_test_output(line: &str) -> bool {
 pub fn normalize_for_grouping(log: &str) -> String {
     let re_shard = Regex::new(r"shard \d+/\d+").unwrap();
     let re_timing = Regex::new(r"\d+\.\d+s").unwrap();
+    let re_hms = Regex::new(r"\(\d+:\d+:\d+\)").unwrap();
     let re_coverage_file = Regex::new(r"canal-coverage-\d+\.xml").unwrap();
     let re_group = Regex::new(r"--group \d+").unwrap();
+    let re_eq_sep = Regex::new(r"={3,}").unwrap();
 
     let s = re_shard.replace_all(log, "shard N/N");
     let s = re_timing.replace_all(&s, "N.Ns");
+    let s = re_hms.replace_all(&s, "");
     let s = re_coverage_file.replace_all(&s, "canal-coverage-N.xml");
     let s = re_group.replace_all(&s, "--group N");
+    let s = re_eq_sep.replace_all(&s, "===");
+    // Collapse multiple spaces left by removals
+    let re_spaces = Regex::new(r" {2,}").unwrap();
+    let s = re_spaces.replace_all(&s, " ");
     s.to_string()
 }
 
@@ -506,22 +517,47 @@ mod tests {
     }
 
     #[test]
-    fn test_is_test_output_indented_line() {
-        // Indented lines (starting with spaces) should be recognized as test output
-        let input = "real output\n\
-                     ^^^ +++\n\
-                       File \"test.py\", line 10";
+    fn test_is_test_output_failure_marker_recovery() {
+        // A line with a FAILURE_MARKER after noise should trigger recovery
+        let input = "real output\n^^^ +++\nsome noise\nTraceback (most recent call last):";
         let result = strip_buildkite_noise(input);
-        assert!(result.contains("File \"test.py\""));
+        assert!(result.contains("Traceback (most recent call last)"));
     }
 
     #[test]
-    fn test_is_test_output_assert_keyword() {
+    fn test_is_test_output_e_prefix() {
+        // Lines starting with "E " (pytest assertion output) should be recognized
         let input = "real output\n\
                      ^^^ +++\n\
-                     assert x == 1";
+                     E   AssertionError: expected 1 got 2";
         let result = strip_buildkite_noise(input);
-        assert!(result.contains("assert x == 1"));
+        assert!(result.contains("E   AssertionError"));
+    }
+
+    #[test]
+    fn test_strip_noise_docker_run_command() {
+        // The "run --name buildkite..." line from failed command output should be stripped
+        let input = "FAILED test_something\n\
+                     ^^^ +++\n\
+                     run --name buildkite019c3997_test_build_5939 --label com.buildkite.pipeline_name=Pipeline -T --rm test pytest\n\
+                     \u{1f6a8} Error: The command exited with status 2";
+        let result = strip_buildkite_noise(input);
+        assert!(result.contains("FAILED test_something"));
+        assert!(!result.contains("run --name buildkite"));
+        assert!(!result.contains("Error: The command exited with status 2"));
+    }
+
+    #[test]
+    fn test_strip_noise_does_not_recover_on_broad_test_keyword() {
+        // "test" appearing in a docker command should NOT cause noise recovery
+        let input = "real output\n\
+                     ^^^ +++\n\
+                     run --name buildkite_test_build --rm test pytest\n\
+                     some other infra line";
+        let result = strip_buildkite_noise(input);
+        assert!(result.contains("real output"));
+        assert!(!result.contains("--rm test pytest"));
+        assert!(!result.contains("some other infra line"));
     }
 
     #[test]
@@ -538,6 +574,19 @@ mod tests {
         let log1 = "FAILED shard 1/20 in 59.72s\ncanal-coverage-1.xml\n--group 1";
         let log2 = "FAILED shard 19/20 in 56.74s\ncanal-coverage-19.xml\n--group 19";
         assert_eq!(normalize_for_grouping(log1), normalize_for_grouping(log2));
+    }
+
+    #[test]
+    fn test_normalize_hms_timing() {
+        // Some logs have (H:MM:SS) after the seconds, some don't. Both should normalize the same.
+        let log1 = "=== 1 error in 54.49s ===============================";
+        let log2 = "=== 1 error in 62.41s (0:01:02) ==========================";
+        let log3 = "=== 1 error in 63.72s (0:01:03) ==========================";
+        let n1 = normalize_for_grouping(log1);
+        let n2 = normalize_for_grouping(log2);
+        let n3 = normalize_for_grouping(log3);
+        assert_eq!(n1, n2, "log1 vs log2: {n1:?} != {n2:?}");
+        assert_eq!(n2, n3, "log2 vs log3: {n2:?} != {n3:?}");
     }
 
     #[test]
