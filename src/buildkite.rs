@@ -78,7 +78,9 @@ impl BuildkiteClient {
 
         if resp.status() == 404 {
             return Err(anyhow!(
-                "Buildkite build not found: {org}/{pipeline}/builds/{build_number}"
+                "Buildkite build not found: {org}/{pipeline}/builds/{build_number}. \
+                 This can also happen if your BUILDKITE_API_TOKEN lacks access to the \"{org}\" organization. \
+                 Check that the token is authorized at https://buildkite.com/organizations/{org}/api-access-tokens"
             ));
         }
 
