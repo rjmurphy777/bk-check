@@ -6,6 +6,8 @@ pub mod models;
 pub mod parse;
 
 use anyhow::{anyhow, Context, Result};
+use futures::future::join_all;
+use tokio::sync::Semaphore;
 
 use buildkite::BuildkiteClient;
 use github::GitHubClient;
@@ -59,13 +61,21 @@ pub async fn run(
         .await
         .context("Failed to fetch Buildkite build")?;
 
-    // 5. Categorize jobs
+    // 5. Categorize jobs (sync, no I/O)
     let mut passed_jobs = Vec::new();
-    let mut failed_jobs = Vec::new();
     let mut warnings = Vec::new();
 
+    struct FailedJobMeta {
+        name: String,
+        state: String,
+        exit_status: Option<i32>,
+        web_url: Option<String>,
+        job_id: String,
+    }
+
+    let mut failed_metas = Vec::new();
+
     for job in &build.jobs {
-        // Only look at script jobs
         if job.job_type != "script" {
             continue;
         }
@@ -76,7 +86,6 @@ pub async fn run(
             .unwrap_or_else(|| format!("unnamed-{}", job.id));
         let state = job.state.clone().unwrap_or_else(|| "unknown".to_string());
 
-        // Soft-failed jobs are warnings, not failures
         if job.soft_failed == Some(true) {
             warnings.push(format!("Soft-failed: {name} ({state})"));
             passed_jobs.push(JobSummary {
@@ -91,36 +100,53 @@ pub async fn run(
                 passed_jobs.push(JobSummary { name, state });
             }
             "failed" | "waiting_failed" | "canceled" | "timed_out" => {
-                // Fetch log for failed jobs
-                let failure_log = match bk_client
-                    .get_job_log(
-                        &bk_info.org,
-                        &bk_info.pipeline,
-                        bk_info.build_number,
-                        &job.id,
-                    )
-                    .await
-                {
-                    Ok(log_resp) => log_parser::clean_log(&log_resp.content, max_log_lines),
-                    Err(e) => {
-                        warnings.push(format!("Failed to fetch log for {name}: {e}"));
-                        "(log unavailable)".to_string()
-                    }
-                };
-
-                failed_jobs.push(FailedJob {
+                failed_metas.push(FailedJobMeta {
                     name,
                     state,
                     exit_status: job.exit_status,
                     web_url: job.web_url.clone(),
-                    failure_log,
+                    job_id: job.id.clone(),
                 });
             }
             _ => {
-                // Running, scheduled, etc. - treat as passed for reporting
                 passed_jobs.push(JobSummary { name, state });
             }
         }
+    }
+
+    // 6. Fetch all failed job logs concurrently (max 10 at a time)
+    let semaphore = Semaphore::new(10);
+    let org = &bk_info.org;
+    let pipeline = &bk_info.pipeline;
+    let build_number = bk_info.build_number;
+    let log_futures = failed_metas.iter().map(|meta| {
+        let sem = &semaphore;
+        async move {
+            let _permit = sem.acquire().await.unwrap();
+            bk_client
+                .get_job_log(org, pipeline, build_number, &meta.job_id)
+                .await
+        }
+    });
+    let log_results = join_all(log_futures).await;
+
+    // 7. Assemble FailedJob structs
+    let mut failed_jobs = Vec::new();
+    for (meta, log_result) in failed_metas.into_iter().zip(log_results) {
+        let failure_log = match log_result {
+            Ok(log_resp) => log_parser::clean_log(&log_resp.content, max_log_lines),
+            Err(e) => {
+                warnings.push(format!("Failed to fetch log for {}: {e}", meta.name));
+                "(log unavailable)".to_string()
+            }
+        };
+        failed_jobs.push(FailedJob {
+            name: meta.name,
+            state: meta.state,
+            exit_status: meta.exit_status,
+            web_url: meta.web_url,
+            failure_log,
+        });
     }
 
     Ok(BuildReport::new(
